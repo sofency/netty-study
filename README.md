@@ -55,3 +55,66 @@ sendFile函数优化，数据根本不经过用户态，直接从内核缓冲区
 更少的上下文切换，更少的CPU缓存伪共享以及无CPU校验和计算
 ![](./1675337063648.jpg)
 
+####Reactor模式
+1）基于IO复用模型，多个连接公用一个阻塞对象，应用程序只需要在一个阻塞对象等待，无需阻塞等待所有连接，当某个连接有新的数据可以处理时，操作系统通知应用程序，线程从阻塞状态返回，开始进行业务处理
+2）基于线程池复用线程资源，不必再为每个连接创建线程，将连接完成后的业务处理任务分配给线程进行处理，一个线程可以处理多个连接的业务
+图解大致原理
+![](./1675386522512.jpg)
+
+核心组成:  
+Reactor: Reactor在一个单独的线程中运行，负责监听和分发事件，分发给适当的处理程序来对IO事件做出反应。
+Handlers: 处理程序执行IO事件要完成的实际事件，类似于客户想要与之交谈的公司中的实际官员。Reactor通过调度适当的处理程序来响应IO事件，处理程序执行非阻塞操作。
+
+单Reactor单线程
+![](./1675387550832.jpg)
+
+单Reactor多线程
+1. Reactor对象通过select监控客户端请求事件，收到事件后，通过dispatch进行分发。
+2. 如果简历连接请求，则由Acceptor通过accept处理连接请求，然后创建一个Handler对象处理完成连接后的各种事件
+3. 如果不是连接请求，则由reactor分发调用连接对应的handler来处理
+4. handler只负责响应，不做具体的业务处理，通过read读取数据后，会分发给后面的worker线程池的某个线程进行处理业务
+![](./1675388465987.jpg)
+
+主从Reactor多线程  
+针对单Reactor多线程模型中，Reactor在单线程中运行，高并发场景下容易称为性能瓶颈，可以让Reactor在多线程中运行
+
+#### Netty模型
+1. BossGroup专门负责接收客户端的连接,WorkerGroup负责网络的读写
+2. BossGroup和WorkerGroup 都是NIOEventLoopGroup(相当于一个事件循环组，这个组中含有多个事件循环，每个事件循环是NIOEventLoop)
+3. NIOEventLoop表示一个不断循环的执行处理任务的线程，每个NIOEventLoop都有一个selector，用于监听绑定在其上的socket的网络通信
+4. NioEventLoopGroup可以有多个线程，即可以含有多个NIOEventLoop
+5. 每个Boss NIOEventLoop执行的步骤有3步
+    - 执行accept事件
+    - 处理accept事件，与client建立连接，生成NioSocketChannel，并将其注册到某个worker NIOEventLoop上的selector
+    - 处理任务队列的任务 runAllTasks
+6. 每个Worker NIOEventLoop循环执行的步骤
+    - 轮训read，write事件
+    - 处理IO事件，在对应的NIOSocketChannel中处理
+    - 处理任务队列的任务 runAllTasks
+7. 每个Worker NioEventLoop处理业务时，会使用pipeline，**_pipeline_**中包含了channel，即通过pipeline可以获取对应通道，管道中维护了很多的处理器
+
+TaskQueue模式  
+其实每个selector，都绑定了一个TaskQueue，用于异步执行那些耗时比较长操作
+```
+# 在handler中做如下操作
+ctx.channel().eventLoop().execute();
+ctx.channel().eventLoop().schedule();
+多次提交是taskQueue是线性执行的
+```
+
+
+#### Bootstrap ServerBootStrap
+```txt
+BootStrap是客户端的启动引导类，ServerBootStrap是服务端启动引导类 
+public B channel(Class<? extends C> channelClass) 该方法用来设置服务端或者客户端通道的实现类 
+public <T> B option(ChannelOption<T> option, T value)用来给ServerChannel 添加配置
+public <T> ServerBootstrap childOption(ChannelOption<T> childOption, T value)  用来给接收到的通道添加配置
+public ServerBootstrap childHandler(ChannelHandler childHandler)该方法用来设置业务处理类
+public ChannelFuture connect(String inetHost, int inetPort)该方法用于客户端（Bootstrap），用来连接服务器
+```
+
+#### Channel
+- netty网络通信的组件，能够用于执行网络IO操作
+- 通过Channel可获得当前网络连接的通道的状态
+- 通过Channel可以获得网络连接的配置参数
+- Channel提供异步的网络IO操作（建立连接，读写，绑定端口），异步调用意味着任何IO调用将立即返回，并且不保证调用结束时所请求的IO操作已完成

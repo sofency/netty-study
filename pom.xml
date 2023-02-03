@@ -11,6 +11,7 @@
     <modules>
         <module>BIOServer</module>
         <module>NIO</module>
+        <module>netty</module>
     </modules>
 
 
