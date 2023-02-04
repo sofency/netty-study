@@ -118,3 +118,17 @@ public ChannelFuture connect(String inetHost, int inetPort)该方法用于客户
 - 通过Channel可获得当前网络连接的通道的状态
 - 通过Channel可以获得网络连接的配置参数
 - Channel提供异步的网络IO操作（建立连接，读写，绑定端口），异步调用意味着任何IO调用将立即返回，并且不保证调用结束时所请求的IO操作已完成
+
+#### ChannelHandlerContext
+- 保存了对应的pipeline和Channel相关的上下文信息，方便ChannelHandler调用，同时关联一个事务处理器ChannelHandler
+
+#### ChannelOption
+- Netty在创建Channel实例后，一般需要设置ChannelOption参数
+- ChannelOption.SO_BACKLOG 用来初始化服务器连接队列大小，服务端处理客户端请求时顺序处理的，所以同一时间只能处理一个客户端连接，多个客户端来的时候，服务端将不能处理的请求放到队列中等待处理，backlog指明了队列的大小
+- ChannelOption.SO_KEEPALIVE 一直保持连接状态
+
+#### Unpooled
+Netty 提供的专门用来操作缓冲区的的工具类
+```java
+Unpooled.copiedBuffer("Hello Client", CharsetUtil.UTF_8);
+```
